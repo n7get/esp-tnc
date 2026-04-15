@@ -1,0 +1,128 @@
+menu "ESP-TNC BBS"
+
+    config TNC_ENABLE_LOG_TCP_SERVER
+        bool "Enable AX.25 log TCP server"
+        default y
+        default n if !SPIRAM
+        help
+            Starts the optional AX.25 log TCP server used for remote log
+            streaming. This consumes additional heap, queues, and a task per
+            client. On builds without PSRAM it is often better left disabled.
+
+    config TNC_ENABLE_MONITOR_TCP_SERVER
+        bool "Enable AX.25 monitor TCP server"
+        default y
+        default n if !SPIRAM
+        help
+            Starts the AX.25 monitor TCP server used to stream monitor traffic
+            to external clients. Disable this to reduce memory use when remote
+            monitoring is not needed.
+
+    config TNC_ENABLE_BEACON_SERVICE
+        bool "Enable AX.25 beacon service"
+        default y
+        default n if !SPIRAM
+        help
+            Enables the runtime beacon service. Disable this to remove beacon
+            support entirely, regardless of runtime beacon configuration.
+
+    config TNC_ENABLE_DIGIPEATER_SERVICE
+        bool "Enable AX.25 digipeater service"
+        default y
+        default n if !SPIRAM
+        help
+            Enables the runtime digipeater service. Disable this to prevent the
+            digipeater from starting, even if `digi.callsign` is configured.
+
+    config TNC_PWR_LED_GPIO
+        int "Power LED GPIO pin"
+        default 0
+        range 0 48
+        help
+            Default GPIO used for the power LED. This value also seeds
+            led.pwr_pin in runtime AX.25 config.
+
+    config TNC_BBS_LED_GPIO
+        int "BBS LED GPIO pin"
+        default 0
+        range 0 48
+        help
+            Default GPIO used for the BBS status LED. This value also seeds
+            led.bbs_pin in runtime AX.25 config.
+
+    config BBS_SYSOP_NAME
+        string "SYSOP Name"
+        default "SYSOP"
+
+    config BBS_GREETING_TEXT
+        string "Greeting text"
+        default "Welcome to ESP-TNC BBS"
+
+    config BBS_PROMPT_TEXT
+        string "Command prompt text"
+        default "BBS READY>"
+
+    config BBS_CONFIG_PROMPT_TEXT
+        string "Config mode prompt text"
+        default "CONFIG READY>"
+
+    config BBS_TERMINAL_PROMPT_TEXT
+        string "Terminal mode prompt text"
+        default "TERM READY>"
+
+    config BBS_VERSION_TEXT
+        string "BBS version string"
+        default "ESP-TNC BBS 0.1"
+
+    config BBS_PARTITION_LABEL
+        string "LittleFS partition label"
+        default "bbs_data"
+
+    config BBS_MAX_MESSAGES
+        int "Maximum number of stored messages"
+        default 100
+        range 10 250
+
+    config BBS_MAX_BODY_LEN
+        int "Maximum message body length"
+        default 1024
+        range 256 4096
+
+    config BBS_CMD_TRACE_LOG
+        bool "Log BBS commands and one-line response summaries"
+        default n
+        help
+            When enabled, logs one CMD line and one RESP line per processed
+            command to help diagnose script behavior and command flow.
+
+    config BBS_SYSOP_CHALLENGE_TIMEOUT_SEC
+        int "SYSOP challenge timeout (seconds)"
+        default 300
+        range 30 86400
+
+    config BBS_SYSOP_SESSION_TIMEOUT_SEC
+        int "SYSOP authenticated session timeout (seconds)"
+        default 600
+        range 30 86400
+
+    config BBS_SYSOP_LOCKOUT_SEC
+        int "SYSOP lockout duration after max failures (seconds)"
+        default 900
+        range 30 86400
+
+    config BBS_SYSOP_MAX_ATTEMPTS
+        int "SYSOP max failed attempts per session"
+        default 3
+        range 1 20
+
+    config BBS_SYSOP_SECRET_MIN_LEN
+        int "SYSOP secret minimum length"
+        default 16
+        range 1 256
+
+    config BBS_SYSOP_SECRET_MAX_LEN
+        int "SYSOP secret maximum length"
+        default 256
+        range 16 256
+
+endmenu

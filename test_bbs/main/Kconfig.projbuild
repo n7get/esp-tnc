@@ -1,0 +1,155 @@
+menu "AX.25 BBS Tester Configuration"
+
+    config TEST_BBS_WIFI_SSID
+        string "WiFi SSID"
+        default "ESP-AX25"
+
+
+    config TEST_BBS_WIFI_PASSWORD
+        string "WiFi Password"
+        default ""
+
+    config TEST_BBS_WIFI_AP_SSID
+        string "Fallback AP SSID"
+        default "ESP-AX25-TEST"
+
+    config TEST_BBS_WIFI_AP_PASSWORD
+        string "Fallback AP Password"
+        default ""
+
+    choice TEST_BBS_KISS_TRANSPORT
+        prompt "KISS transport mode"
+        default TEST_BBS_KISS_TCP
+        help
+            Select whether to use TCP or UART KISS transport.
+            TCP requires WiFi connectivity; UART requires a TNC on UART.
+
+        config TEST_BBS_KISS_TCP
+            bool "TCP KISS (WiFi)"
+
+        config TEST_BBS_KISS_UART
+            bool "UART KISS"
+    endchoice
+
+    # TCP KISS configuration
+    config TEST_BBS_REMOTE_HOST
+        string "BBS KISS TCP Host"
+        default "192.168.4.1"
+        depends on TEST_BBS_KISS_TCP
+        help
+            Hostname or IPv4 address of the BBS KISS TCP server.
+            The default assumes the BBS is running in fallback AP mode,
+            which uses 192.168.4.1 on SSID ESP-AX25 unless overridden by
+            runtime ax25_config settings.
+
+    config TEST_BBS_REMOTE_TCP_PORT
+        int "BBS KISS TCP Port"
+        default 8100
+        range 1 65535
+        depends on TEST_BBS_KISS_TCP
+
+    # UART KISS configuration
+    config TEST_BBS_UART_NUMBER
+        int "UART port number"
+        default 1
+        range 0 2
+        depends on TEST_BBS_KISS_UART
+        help
+            UART port: 0–2 (typically 1 for TNC).
+
+    choice TEST_BBS_UART_BAUD_CHOICE
+        prompt "UART baud rate"
+        default TEST_BBS_UART_BAUD_57600
+        depends on TEST_BBS_KISS_UART
+        help
+            Select a supported UART baud rate for TNC communication.
+
+        config TEST_BBS_UART_BAUD_1200
+            bool "1200"
+
+        config TEST_BBS_UART_BAUD_2400
+            bool "2400"
+
+        config TEST_BBS_UART_BAUD_4800
+            bool "4800"
+
+        config TEST_BBS_UART_BAUD_9600
+            bool "9600"
+
+        config TEST_BBS_UART_BAUD_19200
+            bool "19200"
+
+        config TEST_BBS_UART_BAUD_38400
+            bool "38400"
+
+        config TEST_BBS_UART_BAUD_57600
+            bool "57600"
+
+        config TEST_BBS_UART_BAUD_115200
+            bool "115200"
+
+        config TEST_BBS_UART_BAUD_230400
+            bool "230400"
+
+        config TEST_BBS_UART_BAUD_460800
+            bool "460800"
+
+        config TEST_BBS_UART_BAUD_921600
+            bool "921600"
+    endchoice
+
+    config TEST_BBS_UART_BAUD
+        int
+        depends on TEST_BBS_KISS_UART
+        default 1200 if TEST_BBS_UART_BAUD_1200
+        default 2400 if TEST_BBS_UART_BAUD_2400
+        default 4800 if TEST_BBS_UART_BAUD_4800
+        default 9600 if TEST_BBS_UART_BAUD_9600
+        default 19200 if TEST_BBS_UART_BAUD_19200
+        default 38400 if TEST_BBS_UART_BAUD_38400
+        default 57600 if TEST_BBS_UART_BAUD_57600
+        default 115200 if TEST_BBS_UART_BAUD_115200
+        default 230400 if TEST_BBS_UART_BAUD_230400
+        default 460800 if TEST_BBS_UART_BAUD_460800
+        default 921600 if TEST_BBS_UART_BAUD_921600
+
+    config TEST_BBS_UART_TXD_PIN
+        int "UART TXD (to TNC RXD) pin"
+        default 6
+        range 0 46
+        depends on TEST_BBS_KISS_UART
+
+    config TEST_BBS_UART_RXD_PIN
+        int "UART RXD (from TNC TXD) pin"
+        default 7
+        range 0 46
+        depends on TEST_BBS_KISS_UART
+
+    # Common callsign configuration
+    config TEST_BBS_LOCAL_CALLSIGN
+        string "Tester AX.25 callsign"
+        default "N0TST-1"
+
+    config TEST_BBS_REMOTE_CALLSIGN
+        string "BBS AX.25 callsign"
+        default "N0CALL-1"
+
+    config TEST_BBS_SYSOP_SECRET
+        string "BBS SYSOP secret for CONFIG test"
+        default ""
+        help
+            Leave empty to test CONFIG entry without authentication.
+            Set this to the same SYSOP secret used by the BBS under test
+            to validate the authenticated CONFIG challenge/response flow.
+
+    config TEST_BBS_CONNECT_TIMEOUT_MS
+        int "Connection timeout (ms)"
+        default 60000
+        range 1000 300000
+
+    config TEST_BBS_STEP_TIMEOUT_MS
+        int "Per-step timeout (ms)"
+        default 20000
+        range 1000 120000
+
+endmenu

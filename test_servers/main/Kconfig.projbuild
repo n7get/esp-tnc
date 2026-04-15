@@ -1,0 +1,110 @@
+menu "AX.25 Test Server Configuration"
+
+    config TEST_SERVER_LOCAL_CALLSIGN
+        string "Local Callsign"
+        default "N0CALL"
+        help
+            AX.25 callsign used by this test client.
+
+    config TEST_SERVER_REMOTE_CALLSIGN
+        string "Remote Callsign"
+        default "N0CALL-1"
+        help
+            Remote BBS callsign on the target esp-tnc.
+
+    config TEST_SERVER_TARGET_HOST
+        string "Target Host/IP"
+        default "192.168.4.1"
+        help
+            Hostname or dotted-quad IP address of the target esp-tnc server.
+
+    config TEST_SERVER_ENABLE_KISS_CLIENT
+        bool "Enable KISS-over-TCP client"
+        default y
+        help
+            Enable the TCP KISS transport path.
+
+    config TEST_SERVER_KISS_PORT
+        int "KISS TCP Port"
+        default 8100
+        range 1 65535
+        depends on TEST_SERVER_ENABLE_KISS_CLIENT
+        help
+            TCP port used by the target KISS server.
+
+    config TEST_SERVER_ENABLE_AGWPE_CLIENT
+        bool "Enable AGWPE-over-TCP client"
+        default y
+        help
+            Enable the TCP AGWPE transport path.
+
+    config TEST_SERVER_AGWPE_PORT
+        int "AGWPE TCP Port"
+        default 8000
+        range 1 65535
+        depends on TEST_SERVER_ENABLE_AGWPE_CLIENT
+        help
+            TCP port used by the target AGWPE server.
+
+    config TEST_SERVER_SESSION_COUNT
+        int "Session Count"
+        default 2
+        range 1 100
+        help
+            Number of BBS sessions to run. When both transports are enabled,
+            sessions alternate between KISS and AGWPE.
+
+    config TEST_SERVER_CONNECT_TIMEOUT_MS
+        int "Connect timeout (ms)"
+        default 45000
+        range 1000 300000
+        help
+            Maximum time to wait for TCP and AX.25 or AGWPE connect events.
+
+    config TEST_SERVER_READ_TIMEOUT_MS
+        int "Prompt read timeout (ms)"
+        default 120000
+        range 1000 600000
+        help
+            Maximum time to wait for each configured BBS prompt.
+
+    config TEST_SERVER_PROMPT_PREFIX
+        string "BBS prompt prefix"
+        default "BBS READY>"
+        help
+            Prefix used to detect the BBS prompt. A received line matches
+            when it starts with this string.
+
+    config TEST_SERVER_EXERCISE_HEARD_LIST
+        bool "Exercise heard-list command"
+        default y
+        help
+            Send the `j` command after the first prompt and wait for the next
+            prompt. Disable this to keep the session connected but skip the
+            heard-list exercise while additional BBS test steps are added.
+
+    config TEST_SERVER_WIFI_SSID
+        string "Wi-Fi STA SSID"
+        default ""
+        help
+            Station SSID used to reach the target esp-tnc.
+
+    config TEST_SERVER_WIFI_PASSWORD
+        string "Wi-Fi STA Password"
+        default ""
+        help
+            Station password used to reach the target esp-tnc.
+
+    config TEST_SERVER_WIFI_AP_SSID
+        string "Fallback AP SSID"
+        default "esp-ax25-test"
+        help
+            Access point SSID used when no station SSID is configured.
+
+    config TEST_SERVER_WIFI_AP_PASSWORD
+        string "Fallback AP Password"
+        default ""
+        help
+            Access point password used when no station SSID is configured.
+
+endmenu

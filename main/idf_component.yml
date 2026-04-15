@@ -1,0 +1,5 @@
+dependencies:
+  idf: ">=5.0.0"
+  esp-ax25:
+    path: "../../components/esp-ax25"
+  joltwallet/littlefs: "^1.20.2"
