@@ -1,43 +1,26 @@
 # test_bbs
 
-Automated AX.25 BBS test application for a second ESP32.
 
-This app supports two KISS transport modes:
+Automated BBS command test suite for ESP-TNC.
 
-- **TCP KISS**: Connect over WiFi to a remote KISS TCP server, or
-- **UART KISS**: Connect via UART to a local KISS TNC
-
-Once connected, it opens an AX.25 connected session to the BBS, runs a scripted
-set of BBS command tests, and prints a pass/fail summary to logs.
+This app connects to a BBS (esp-tnc) instance running on a separate device, using either KISS-over-TCP or KISS-over-UART. It runs a scripted set of BBS command tests and prints a pass/fail summary to logs.
 
 ## What it tests
 
-- BBS banner and prompt (`BBS> `)
-- `CONFIG` entry, read-only query, and exit
-- `I` (info)
-- `J` (heard list)
-- `LL` (list messages)
-- `SB` post flow, including `Subject:` and `/EX` finish
-- banner unread-count summary and state after reconnect/read/delete
-- `L` list contains posted message
-- `LM` mine-only filtering
-- `R <id>` reads posted message
-- `K <id>` deletes posted message
-- `R <id>` after delete reports not found
-- `SP <valid>` private post flow, visibility filtering, and access denial for non-addressed reads
-- `SP <invalid>` validation
-- unknown command help output
-- `B` disconnect behavior
-- Cleanup of test-created messages
+- BBS banner and prompt
+- Configuration mode entry and query
+- Info, heard list, and message listing
+- Posting, reading, and deleting messages
+- Private and bulletin message flows
+- Unknown command handling
+- Session disconnect and cleanup
 
-## Configure
+## How to use
 
-Run menuconfig in this app folder and:
-
-1. **Transport mode**: Choose `TEST_BBS_KISS_TCP` or `TEST_BBS_KISS_UART` (mutually exclusive)
-
-2. **For TCP transport**:
-   - Set `TEST_BBS_WIFI_SSID` and `TEST_BBS_WIFI_PASSWORD`
+1. Build and flash to a test ESP32 device.
+2. Configure transport (TCP or UART) and connection parameters in menuconfig.
+3. Start the BBS (esp-tnc) on another device.
+4. Run the test; results and pass/fail summary are printed to the log.
    - Set `TEST_BBS_REMOTE_HOST` (IP/hostname of BBS KISS TCP server)
    - Set `TEST_BBS_REMOTE_TCP_PORT` (default 8100)
 

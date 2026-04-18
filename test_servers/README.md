@@ -1,34 +1,22 @@
+
 # test_server
 
-`test_server` is a standalone ESP-IDF app for exercising an external `esp-tnc`
-server with a scripted BBS flow over TCP transports.
+Automated test app for exercising an external esp-tnc server (running on a separate device) with scripted BBS flows over TCP transports (KISS and AGWPE).  This test was developed to be flashed to multiple devices and executed simultaneously to stress test an esp-tnc.  
 
-Supported transports:
-- KISS-over-TCP
-- AGWPE-over-TCP
+## What it tests
 
-Both transports are TCP-only in this app. There is no UART path.
+- Connects to esp-tnc via KISS-over-TCP and AGWPE-over-TCP
+- Establishes AX.25/BBS session
+- Sends basic BBS commands (e.g., heard list, disconnect)
+- Alternates between KISS and AGWPE if both are enabled
 
-## What It Does
+## How to use
 
-For each session, the app:
-1. Connects to the target `esp-tnc` transport endpoint.
-2. Establishes connected-mode AX.25/BBS session.
-3. Waits for the configured BBS prompt prefix.
-4. Sends `j\r`.
-5. Waits for the next configured BBS prompt prefix.
-6. Sends `b\r` and disconnects.
-
-## Transport Enable/Disable Behavior
-
-Configured in menuconfig:
-- `TEST_SERVER_ENABLE_KISS_CLIENT`
-- `TEST_SERVER_ENABLE_AGWPE_CLIENT`
-
-Runtime behavior:
-- Both disabled: app logs an error and exits.
-- Only one enabled: app runs only that transport.
-- Both enabled: app alternates session-by-session between KISS and AGWPE.
+1. Build and flash to a test ESP32 device.
+2. Configure local/remote callsigns, target host/IP, and TCP ports in menuconfig.
+3. Enable desired transports (KISS, AGWPE) in menuconfig.
+4. Start the BBS (esp-tnc) on another device.
+5. Run the test; results and pass/fail summary are printed to the log.
 
 ## Key Configuration
 

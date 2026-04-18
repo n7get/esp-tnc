@@ -1276,7 +1276,7 @@ static void run_script(app_ctx_t *ctx)
         ok = send_text(&ctx->conn, line);
         if (ok) {
             ok = (read_until_token(ctx,
-                                   "Enter body, /EX to finish:\r",
+                                   "Enter body, use /EX to finish:\r",
                                    CONFIG_TEST_BBS_STEP_TIMEOUT_MS,
                                    capture,
                                    CAPTURE_MAX) == ESP_OK);
@@ -1427,7 +1427,7 @@ static void run_script(app_ctx_t *ctx)
         ok = send_text(&ctx->conn, line);
         if (ok) {
             ok = (read_until_token(ctx,
-                                   "Enter body, /EX to finish:\r",
+                                   "Enter body, use /EX to finish:\r",
                                    CONFIG_TEST_BBS_STEP_TIMEOUT_MS,
                                    capture,
                                    CAPTURE_MAX) == ESP_OK);

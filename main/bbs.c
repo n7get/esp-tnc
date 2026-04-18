@@ -1036,17 +1036,31 @@ static void bbs_process_input_line(bbs_t *bbs)
                 bbs->line_buf[0] ? bbs->line_buf : "(no subject)",
                 sizeof(bbs->pending_subject));
         bbs->input_mode = BBS_INPUT_MODE_BODY;
-        bbs_send_text(bbs, "\rEnter body, /EX to finish:\r");
+        char info[80];
+        size_t free_bytes = 0;
+        bbs_storage_free_bytes(bbs->storage, &free_bytes);
+        snprintf(info, sizeof(info),
+                 "Max message size: %u bytes, Total storage free: %u bytes\r",
+                 (unsigned)(sizeof(bbs->pending_body) - 1),
+                 (unsigned)free_bytes);
+        bbs_send_text(bbs, info);
+        bbs_send_text(bbs, "Enter body, use /EX to finish:\r");
     } else if (bbs->input_mode == BBS_INPUT_MODE_BODY) {
         if (equals_ignore_case_ascii(bbs->line_buf, "/EX")) {
             finish_post(bbs);
         } else {
             size_t remain = sizeof(bbs->pending_body) - 1 - bbs->pending_body_len;
-            if (remain > 2) {
-                size_t copy = strlen(bbs->line_buf);
-                if (copy > remain - 2) {
-                    copy = remain - 2;
-                }
+            size_t copy = strlen(bbs->line_buf);
+            if (remain <= 2) {
+                bbs_send_text(bbs, "*** Body full, use /EX to finish\r");
+            } else if (copy > remain - 2) {
+                copy = remain - 2;
+                memcpy(bbs->pending_body + bbs->pending_body_len, bbs->line_buf, copy);
+                bbs->pending_body_len += copy;
+                bbs->pending_body[bbs->pending_body_len++] = '\r';
+                bbs->pending_body[bbs->pending_body_len] = '\0';
+                bbs_send_text(bbs, "*** Body limit reached, use /EX to finish\r");
+            } else {
                 memcpy(bbs->pending_body + bbs->pending_body_len, bbs->line_buf, copy);
                 bbs->pending_body_len += copy;
                 bbs->pending_body[bbs->pending_body_len++] = '\r';

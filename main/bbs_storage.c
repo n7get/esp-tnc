@@ -20,6 +20,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <stddef.h>
 
 #include "esp_log.h"
 #include "esp_littlefs.h"
@@ -319,4 +320,19 @@ esp_err_t bbs_storage_delete_message(bbs_storage_t *st, uint32_t id)
     st->count--;
 
     return index_save(st);
+}
+
+esp_err_t bbs_storage_free_bytes(const bbs_storage_t *st, size_t *out_free)
+{
+    if (!st || !st->mounted || !out_free) {
+        return ESP_FAIL;
+    }
+    size_t total = 0, used = 0;
+    esp_err_t err = esp_littlefs_info(st->partition_label, &total, &used);
+    if (err != ESP_OK) {
+        *out_free = 0;
+        return ESP_FAIL;
+    }
+    *out_free = (total > used) ? (total - used) : 0;
+    return ESP_OK;
 }

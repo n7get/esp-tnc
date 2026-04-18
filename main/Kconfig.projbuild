@@ -85,8 +85,8 @@ menu "ESP-TNC BBS"
 
     config BBS_MAX_BODY_LEN
         int "Maximum message body length"
-        default 1024
-        range 256 4096
+        default 4096
+        range 256 10240
 
     config BBS_CMD_TRACE_LOG
         bool "Log BBS commands and one-line response summaries"

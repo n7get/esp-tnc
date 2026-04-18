@@ -25,6 +25,8 @@ ESP-TNC has a built in BBS. An operator can connect to
  the configured BBS callsign and use the command set documented below
 to list, read, and post messages.
 
+When composing a message, the BBS will display the maximum allowed message size and available storage. If the message body exceeds the limit, it will be truncated and a warning will be shown.
+
 The BBS local callsign is read from config key `bbs.callsign`.
 
 ## BBS Commands

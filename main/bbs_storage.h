@@ -22,9 +22,9 @@
 #include <stdbool.h>
 #include "esp_err.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+ #ifdef __cplusplus
+ extern "C" {
+ #endif
 
 #ifndef CONFIG_BBS_MAX_MESSAGES
 #define CONFIG_BBS_MAX_MESSAGES 100
@@ -79,6 +79,15 @@ esp_err_t bbs_storage_read_message(const bbs_storage_t *st,
 
 esp_err_t bbs_storage_delete_message(bbs_storage_t *st, uint32_t id);
 const bbs_message_index_t *bbs_storage_find(const bbs_storage_t *st, uint32_t id);
+
+/**
+ * @brief Get the number of free bytes available in the message store partition.
+ *
+ * @param st Pointer to initialized bbs_storage_t.
+ * @param out_free Pointer to size_t to receive free bytes.
+ * @return ESP_OK on success, ESP_FAIL if not mounted or error.
+ */
+esp_err_t bbs_storage_free_bytes(const bbs_storage_t *st, size_t *out_free);
 
 #ifdef __cplusplus
 }
