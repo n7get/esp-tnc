@@ -1,0 +1,4 @@
+dependencies:
+  idf: ">=5.0.0"
+  esp-ax25:
+    path: "../../../components/esp-ax25"

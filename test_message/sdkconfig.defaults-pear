@@ -1,0 +1,10 @@
+# This file was generated using idf.py save-defconfig. It can be edited manually.
+# Espressif IoT Development Framework (ESP-IDF) 5.5.3 Project Minimal Configuration
+#
+CONFIG_IDF_TARGET="esp32s3"
+CONFIG_TEST_MSG_WIFI_SSID="pear"
+CONFIG_TEST_MSG_WIFI_PASSWORD="dwtr&tsRg"
+CONFIG_TEST_MSG_REMOTE_HOST="192.168.68.167"
+CONFIG_TEST_MSG_LOCAL_CALLSIGN="N0TST"
+CONFIG_TEST_MSG_REMOTE_CALLSIGN="N7GET-1"
+CONFIG_AX25_PHY_TCP_LOG_FRAMES=y
