@@ -485,13 +485,6 @@ static void bbs_worker_task(void *arg)
     }
 }
 
-static void uart_port_frame_cb(const ax25_frame_t *frame, void *user_data)
-{
-    send_uart_frame_with_retry(frame,
-                               (ax25_phy_kiss_uart_t *)user_data,
-                               "UART default port");
-}
-
 static void uart_on_frame(const ax25_frame_t *frame, void *user_data)
 {
     esp_err_t err = ax25_router_send(frame, (ax25_router_port_t *)user_data);
@@ -633,6 +626,25 @@ static StaticTask_t s_agwpe_cleanup_task_tcb;
 static StackType_t s_agwpe_cleanup_task_stack[AGWPE_CLEANUP_TASK_STACK_BYTES / sizeof(StackType_t)];
 
 static void free_agwpe_client_slot(agwpe_client_slot_t *slot);
+
+static void uart_port_frame_cb(const ax25_frame_t *frame, void *user_data)
+{
+    send_uart_frame_with_retry(frame,
+                               (ax25_phy_kiss_uart_t *)user_data,
+                               "UART default port");
+
+    // Notify all AGWPE clients of locally transmitted UI frames (for monitor mode)
+    if (frame && frame->type == AX25_FRAME_UI) {
+        xSemaphoreTake(s_agwpe_clients_mutex, portMAX_DELAY);
+        for (size_t i = 0; i < s_agwpe_max_clients; i++) {
+            agwpe_client_slot_t *slot = &s_agwpe_clients[i];
+            if (slot->in_use && slot->client) {
+                ax25_agwpe_server_client_ax25_out(slot->client, frame);
+            }
+        }
+        xSemaphoreGive(s_agwpe_clients_mutex);
+    }
+}
 
 static void agwpe_cleanup_task(void *arg)
 {
