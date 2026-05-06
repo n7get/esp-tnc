@@ -1,5 +1,10 @@
 # Changes
 
+## 05/05/2026
+
+- Updated idf_component.yml to use Github instead of local filesystem.
+- Broadcast local transmissions to AGWPE monitor clients.
+
 ## 04/18/2026
 
 ### BBS
