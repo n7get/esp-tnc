@@ -323,6 +323,12 @@ static void bbs_send_prompt(bbs_t *bbs)
     bbs_txbuf_flush(&tx);
 }
 
+static bool is_related_to_user(const bbs_t *bbs, const bbs_message_index_t *rec)
+{
+    return strcmp(rec->from, bbs->remote_callsign) == 0 ||
+           strcmp(rec->to, bbs->remote_callsign) == 0;
+}
+
 static bool is_readable_for_user(const bbs_t *bbs, const bbs_message_index_t *rec)
 {
     if ((rec->flags & BBS_MSG_FLAG_BULLETIN) != 0) {
@@ -331,10 +337,7 @@ static bool is_readable_for_user(const bbs_t *bbs, const bbs_message_index_t *re
     if (bbs->is_sysop) {
         return true;
     }
-    if ((rec->flags & BBS_MSG_FLAG_PRIVATE) != 0) {
-        return strcmp(rec->to, bbs->remote_callsign) == 0;
-    }
-    return false;
+    return is_related_to_user(bbs, rec);
 }
 
 void bbs_base_callsign(const char *src, char *out, size_t out_size)
@@ -507,11 +510,10 @@ static int list_messages(bbs_t *bbs, int limit, bool mine_only)
     for (size_t i = start; i < bbs->storage->count; i++) {
         const bbs_message_index_t *rec = &bbs->storage->records[i];
         if (mine_only) {
-            if (strcmp(rec->from, bbs->remote_callsign) != 0 &&
-                strcmp(rec->to, bbs->remote_callsign) != 0) {
+            if (!is_related_to_user(bbs, rec)) {
                 continue;
             }
-        } else if (!is_readable_for_user(bbs, rec)) {
+        } else if (!is_readable_for_user(bbs, rec) && !is_related_to_user(bbs, rec)) {
             continue;
         }
 
@@ -589,7 +591,9 @@ static const char *cmd_kill(bbs_t *bbs, uint32_t id)
         return MESSAGE_NOT_FOUND;
     }
 
-    if (!bbs->is_sysop && strcmp(rec->from, bbs->remote_callsign) != 0) {
+    if (!bbs->is_sysop &&
+        strcmp(rec->from, bbs->remote_callsign) != 0 &&
+        strcmp(rec->to, bbs->remote_callsign) != 0) {
         bbs_send_text(bbs, "*** Kill denied\r");
         return "kill denied";
     }
@@ -762,7 +766,7 @@ static void send_help_text(bbs_t *bbs)
     bbs_txbuf_append_text(&tx, "  H           Show this help text\r");
     bbs_txbuf_append_text(&tx, "  I           Show BBS station information\r");
     bbs_txbuf_append_text(&tx, "  J           Show heard list\r");
-    bbs_txbuf_append_text(&tx, "  K <n>       Delete message n (own or sysop)\r");
+    bbs_txbuf_append_text(&tx, "  K <n>       Delete message n\r");
     bbs_txbuf_append_text(&tx, "  L           List readable messages\r");
     bbs_txbuf_append_text(&tx, "  LL [n]      List newest n readable messages\r");
     bbs_txbuf_append_text(&tx, "  LM          List only my sent/received messages\r");
@@ -1144,8 +1148,7 @@ void bbs_send_banner(bbs_t *bbs)
 
     for (size_t i = 0; i < bbs->storage->count; i++) {
         const bbs_message_index_t *rec = &bbs->storage->records[i];
-        bool for_user = ((rec->flags & BBS_MSG_FLAG_BULLETIN) != 0) ||
-                        (strcmp(rec->to, bbs->remote_callsign) == 0);
+        bool for_user = is_readable_for_user(bbs, rec);
         if (!for_user) {
             continue;
         }
@@ -1182,8 +1185,7 @@ bool bbs_has_unread_messages(bbs_t *bbs)
 
     for (size_t i = 0; i < bbs->storage->count; i++) {
         const bbs_message_index_t *rec = &bbs->storage->records[i];
-        bool for_user = ((rec->flags & BBS_MSG_FLAG_BULLETIN) != 0) ||
-                        (strcmp(rec->to, bbs->remote_callsign) == 0);
+        bool for_user = is_readable_for_user(bbs, rec);
         if (!for_user) {
             continue;
         }

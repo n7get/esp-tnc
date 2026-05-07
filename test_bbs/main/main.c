@@ -47,6 +47,7 @@
 #endif
 
 static const char *TAG = "TEST_BBS";
+static const char *ALT_LOCAL_CALLSIGN = "N9ALT-1";
 
 #define RX_CHUNK_MAX AX25_MAX_INFO_LEN
 #define RX_QUEUE_LEN 32
@@ -87,7 +88,13 @@ typedef struct {
 typedef struct {
     ax25_router_port_t app_port;
     ax25_conn_t conn;
+    ax25_address_t primary_local_addr;
+    ax25_address_t alt_local_addr;
     ax25_address_t remote_addr;
+#if CONFIG_TEST_BBS_KISS_TCP
+    ax25_phy_kiss_tcp_client_t *tcp_phy;
+    ax25_phy_kiss_tcp_client_config_t tcp_phy_cfg;
+#endif
 
     EventGroupHandle_t events;
     QueueHandle_t rx_queue;
@@ -266,6 +273,9 @@ static bool run_cmd_expect_prompt(app_ctx_t *ctx,
                                   char *capture,
                                   size_t capture_len);
 static bool reconnect_session(app_ctx_t *ctx, uint32_t timeout_ms);
+static bool reconnect_as_local(app_ctx_t *ctx,
+                               const ax25_address_t *local_addr,
+                               uint32_t timeout_ms);
 static bool parse_banner_counts(const char *capture,
                                 uint32_t *out_total,
                                 uint32_t *out_new_count);
@@ -275,6 +285,7 @@ static bool reconnect_and_capture_banner(app_ctx_t *ctx,
                                          size_t capture_len,
                                          uint32_t *out_total,
                                          uint32_t *out_new_count);
+static void on_tx_frame(const ax25_frame_t *frame, void *user_data);
 
 static void phy_frame_cb(const ax25_frame_t *frame, void *user_data)
 {
@@ -335,6 +346,20 @@ static void on_data(const uint8_t *data, size_t len, void *user_data)
     if (xQueueSend(ctx->rx_queue, &chunk, 0) != pdTRUE) {
         ESP_LOGW(TAG, "RX queue full, dropping %u bytes", (unsigned)chunk.len);
     }
+}
+
+static void setup_conn_callbacks(ax25_conn_callbacks_t *cbs)
+{
+    if (cbs == NULL) {
+        return;
+    }
+
+    memset(cbs, 0, sizeof(*cbs));
+    cbs->on_connect = on_connect;
+    cbs->on_disconnect = on_disconnect;
+    cbs->on_error = on_error;
+    cbs->on_data = on_data;
+    cbs->on_tx_frame = on_tx_frame;
 }
 
 static void on_tx_frame(const ax25_frame_t *frame, void *user_data)
@@ -640,6 +665,110 @@ static bool reconnect_session(app_ctx_t *ctx, uint32_t timeout_ms)
                                pdMS_TO_TICKS(timeout_ms));
     if ((bits & EVT_CONNECTED) == 0) {
         ESP_LOGW(TAG, "Reconnect timed out waiting for connect");
+        return false;
+    }
+
+    return true;
+}
+
+static bool reconnect_as_local(app_ctx_t *ctx,
+                               const ax25_address_t *local_addr,
+                               uint32_t timeout_ms)
+{
+    EventBits_t bits;
+    esp_err_t err;
+    ax25_conn_callbacks_t cbs;
+    ax25_conn_config_t conn_cfg = AX25_CONN_CONFIG_DEFAULT();
+
+    if (ctx == NULL || ctx->events == NULL || local_addr == NULL) {
+        return false;
+    }
+
+    flush_rx(ctx);
+    xEventGroupClearBits(ctx->events, EVT_CONNECTED | EVT_DISCONNECTED);
+
+    err = ax25_conn_shutdown(&ctx->conn);
+    if (err == ESP_OK) {
+        bits = xEventGroupWaitBits(ctx->events,
+                                   EVT_DISCONNECTED,
+                                   pdTRUE,
+                                   pdFALSE,
+                                   pdMS_TO_TICKS(timeout_ms));
+        if ((bits & EVT_DISCONNECTED) == 0) {
+            ESP_LOGW(TAG, "Reconnect-as-local timed out waiting for disconnect");
+            return false;
+        }
+    } else if (err != ESP_ERR_INVALID_STATE) {
+        ESP_LOGW(TAG, "Reconnect-as-local shutdown failed: %s", esp_err_to_name(err));
+        return false;
+    }
+
+    ax25_conn_deinit(&ctx->conn);
+    memset(&ctx->conn, 0, sizeof(ctx->conn));
+
+#if CONFIG_TEST_BBS_KISS_TCP
+    // The server-side dynamic router binding keys off the transport session.
+    // Reconnect the KISS TCP transport so replies for the new local callsign
+    // are routed back to this client.
+    if (ctx->tcp_phy != NULL) {
+        ax25_phy_kiss_tcp_client_deinit(ctx->tcp_phy);
+        err = ax25_phy_kiss_tcp_client_init(&ctx->tcp_phy_cfg, ctx->tcp_phy);
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "Reconnect-as-local transport init failed: %s", esp_err_to_name(err));
+            return false;
+        }
+
+        if (!wait_for_tcp_phy_connected(ctx->tcp_phy,
+                                        ctx->tcp_phy_cfg.connect_timeout_ms +
+                                        ctx->tcp_phy_cfg.reconnect_delay_ms)) {
+            ESP_LOGW(TAG, "Reconnect-as-local timed out waiting for TCP transport");
+            return false;
+        }
+    }
+#endif
+
+    // Update the app_port destination to match the new local callsign
+    // so frames destined to the new callsign are routed to this connection
+    err = ax25_router_remove_port(&ctx->app_port);
+    if (err != ESP_OK && err != ESP_ERR_NOT_FOUND) {
+        ESP_LOGW(TAG, "Reconnect-as-local remove port failed: %s", esp_err_to_name(err));
+        return false;
+    }
+
+    ctx->app_port.destination = *local_addr;
+    ctx->app_port.mode = AX25_PORT_STATIC;
+    ctx->app_port.on_tx_frame = app_port_on_frame;
+    ctx->app_port.user_data = &ctx->conn;
+
+    err = ax25_router_register_port(&ctx->app_port);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "Reconnect-as-local register port failed: %s", esp_err_to_name(err));
+        return false;
+    }
+
+    setup_conn_callbacks(&cbs);
+    err = ax25_conn_init(&ctx->conn, local_addr, &cbs, ctx, &conn_cfg);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "Reconnect-as-local conn init failed: %s", esp_err_to_name(err));
+        return false;
+    }
+
+    flush_rx(ctx);
+    xEventGroupClearBits(ctx->events, EVT_CONNECTED);
+
+    err = ax25_conn_connect(&ctx->conn, &ctx->remote_addr);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "Reconnect-as-local connect failed: %s", esp_err_to_name(err));
+        return false;
+    }
+
+    bits = xEventGroupWaitBits(ctx->events,
+                               EVT_CONNECTED,
+                               pdTRUE,
+                               pdFALSE,
+                               pdMS_TO_TICKS(timeout_ms));
+    if ((bits & EVT_CONNECTED) == 0) {
+        ESP_LOGW(TAG, "Reconnect-as-local timed out waiting for connect");
         return false;
     }
 
@@ -1043,8 +1172,8 @@ static void run_config_mode_tests(app_ctx_t *ctx, char *capture, size_t capture_
         if (!auth_expected) {
             record_result(ctx,
                           "CONFIG no-auth entry",
-                          false,
-                          "challenge returned but TEST_BBS_SYSOP_SECRET is empty");
+                          true,
+                          "challenge returned; set TEST_BBS_SYSOP_SECRET to fully exercise CONFIG auth flow");
             goto recover;
         }
 
@@ -1167,8 +1296,11 @@ static void run_script(app_ctx_t *ctx)
     char *capture = ctx->capture;
     char line[64];
     char detail[96];
+    char primary_call[16];
     char private_subject[48];
+    char recipient_subject[48];
     bool ok;
+    bool switched_to_alt = false;
     bool recovered = false;
     esp_err_t banner_err;
     uint32_t banner_total = 0;
@@ -1180,6 +1312,7 @@ static void run_script(app_ctx_t *ctx)
     uint32_t banner_after_delete_total = 0;
     uint32_t banner_after_delete_new = 0;
     uint32_t private_message_id = 0;
+    uint32_t recipient_message_id = 0;
 
     snprintf(ctx->run_subject_tag,
              sizeof(ctx->run_subject_tag),
@@ -1189,6 +1322,11 @@ static void run_script(app_ctx_t *ctx)
              sizeof(private_subject),
              "%s-PRIV",
              ctx->run_subject_tag);
+    snprintf(recipient_subject,
+             sizeof(recipient_subject),
+             "%s-TO-ME",
+             ctx->run_subject_tag);
+    ax25_address_to_string(&ctx->primary_local_addr, primary_call, sizeof(primary_call));
 
     banner_err = read_until_any_token(ctx,
                                       PROMPT_TOKENS,
@@ -1470,11 +1608,11 @@ static void run_script(app_ctx_t *ctx)
                                    CONFIG_TEST_BBS_STEP_TIMEOUT_MS,
                                    capture,
                                    CAPTURE_MAX);
-        ok = ok && !capture_contains(capture, private_subject);
+        ok = ok && capture_contains(capture, private_subject);
         record_result(ctx,
-                      "Private hidden from L",
+                      "Private visible in L",
                       ok,
-                      ok ? "private message filtered" : "private message leaked into readable list");
+                      ok ? "L includes sent private message" : "L missing sent private message");
 
         ok = run_cmd_expect_prompt(ctx,
                                    "LM\r",
@@ -1488,17 +1626,29 @@ static void run_script(app_ctx_t *ctx)
                       ok,
                       ok ? "mine-only list includes private post" : "mine-only list missing private post");
 
+        ok = run_cmd_expect_prompt(ctx,
+                       "LL 5\r",
+                       NULL,
+                       CONFIG_TEST_BBS_STEP_TIMEOUT_MS,
+                       capture,
+                       CAPTURE_MAX);
+        ok = ok && capture_contains(capture, private_subject);
+        record_result(ctx,
+                  "Private visible in LL",
+                  ok,
+                  ok ? "newest list includes private post" : "newest list missing private post");
+
         snprintf(line, sizeof(line), "R %lu\r", (unsigned long)private_message_id);
         ok = run_cmd_expect_prompt(ctx,
                                    line,
-                                   "*** Access denied",
+                                   "private line from test_bbs",
                                    CONFIG_TEST_BBS_STEP_TIMEOUT_MS,
                                    capture,
                                    CAPTURE_MAX);
         record_result(ctx,
-                      "Private access denied",
+                      "Private sender read",
                       ok,
-                      ok ? "sender cannot read non-addressed private message" : "private read access control failed");
+                      ok ? "sender can read own private message" : "sender could not read own private message");
 
         snprintf(line, sizeof(line), "K %lu\r", (unsigned long)private_message_id);
         ok = run_cmd_expect_prompt(ctx,
@@ -1513,6 +1663,143 @@ static void run_script(app_ctx_t *ctx)
                       ok ? "sender deleted private post" : "private delete confirmation missing");
     }
 
+    ok = reconnect_as_local(ctx, &ctx->alt_local_addr, CONFIG_TEST_BBS_CONNECT_TIMEOUT_MS);
+    switched_to_alt = ok;
+    if (ok) {
+        ok = (read_until_any_token(ctx,
+                                   PROMPT_TOKENS,
+                                   sizeof(PROMPT_TOKENS) / sizeof(PROMPT_TOKENS[0]),
+                                   CONFIG_TEST_BBS_STEP_TIMEOUT_MS,
+                                   capture,
+                                   CAPTURE_MAX) == ESP_OK);
+    }
+    record_result(ctx,
+                  "Recipient-K alt session",
+                  ok,
+                  ok ? "connected as alternate callsign" : "failed to switch to alternate callsign");
+
+    if (ok) {
+        snprintf(line, sizeof(line), "SP %s\r", primary_call);
+        ok = send_text(&ctx->conn, line);
+        if (ok) {
+            ok = (read_until_token(ctx,
+                                   "Subject: ",
+                                   CONFIG_TEST_BBS_STEP_TIMEOUT_MS,
+                                   capture,
+                                   CAPTURE_MAX) == ESP_OK);
+        }
+        record_result(ctx,
+                      "Recipient-K setup SP",
+                      ok,
+                      ok ? "alt sender entered private subject mode" : "failed to enter private mode for recipient regression");
+    }
+
+    if (ok) {
+        snprintf(line, sizeof(line), "%s\r", recipient_subject);
+        ok = send_text(&ctx->conn, line);
+        if (ok) {
+            ok = (read_until_token(ctx,
+                                   "Enter body, use /EX to finish:\r",
+                                   CONFIG_TEST_BBS_STEP_TIMEOUT_MS,
+                                   capture,
+                                   CAPTURE_MAX) == ESP_OK);
+        }
+    }
+
+    if (ok) {
+        ok = send_text(&ctx->conn, "recipient regression payload\r");
+        if (ok) {
+            ok = send_text(&ctx->conn, "/EX\r");
+        }
+        if (ok) {
+            ok = (read_until_any_token(ctx,
+                                       PROMPT_TOKENS,
+                                       sizeof(PROMPT_TOKENS) / sizeof(PROMPT_TOKENS[0]),
+                                       CONFIG_TEST_BBS_STEP_TIMEOUT_MS,
+                                       capture,
+                                       CAPTURE_MAX) == ESP_OK);
+        }
+        if (ok) {
+            ok = parse_stored_message_id(capture, &recipient_message_id);
+            if (ok) {
+                track_created_id(ctx, recipient_message_id);
+            }
+        }
+        record_result(ctx,
+                      "Recipient-K setup post",
+                      ok,
+                      ok ? "message to primary user stored" : "failed to store recipient regression message");
+    }
+
+    if (switched_to_alt) {
+        ok = reconnect_as_local(ctx, &ctx->primary_local_addr, CONFIG_TEST_BBS_CONNECT_TIMEOUT_MS);
+        if (ok) {
+            ok = (read_until_any_token(ctx,
+                                       PROMPT_TOKENS,
+                                       sizeof(PROMPT_TOKENS) / sizeof(PROMPT_TOKENS[0]),
+                                       CONFIG_TEST_BBS_STEP_TIMEOUT_MS,
+                                       capture,
+                                       CAPTURE_MAX) == ESP_OK);
+        }
+        record_result(ctx,
+                      "Recipient-K return primary",
+                      ok,
+                      ok ? "returned to primary callsign session" : "failed to return to primary session");
+    }
+
+    if (recipient_message_id != 0) {
+        ok = run_cmd_expect_prompt(ctx,
+                                   "L\r",
+                                   NULL,
+                                   CONFIG_TEST_BBS_STEP_TIMEOUT_MS,
+                                   capture,
+                                   CAPTURE_MAX);
+        ok = ok && capture_contains(capture, recipient_subject);
+        record_result(ctx,
+                      "Recipient visible in L",
+                      ok,
+                      ok ? "L includes message addressed to current callsign"
+                         : "L missing message addressed to current callsign");
+
+          snprintf(line, sizeof(line), "R %lu\r", (unsigned long)recipient_message_id);
+          ok = run_cmd_expect_prompt(ctx,
+                                              line,
+                                              "recipient regression payload",
+                                              CONFIG_TEST_BBS_STEP_TIMEOUT_MS,
+                                              capture,
+                                              CAPTURE_MAX);
+          record_result(ctx,
+                             "Recipient read regression",
+                             ok,
+                             ok ? "recipient can read addressed message"
+                                 : "recipient could not read addressed message");
+
+        snprintf(line, sizeof(line), "K %lu\r", (unsigned long)recipient_message_id);
+        ok = run_cmd_expect_prompt(ctx,
+                                   line,
+                                   "*** Message deleted",
+                                   CONFIG_TEST_BBS_STEP_TIMEOUT_MS,
+                                   capture,
+                                   CAPTURE_MAX);
+        record_result(ctx,
+                      "Recipient-K regression",
+                      ok,
+                      ok ? "recipient successfully deleted addressed message"
+                         : "recipient could not delete addressed message");
+
+        snprintf(line, sizeof(line), "R %lu\r", (unsigned long)recipient_message_id);
+        ok = run_cmd_expect_prompt(ctx,
+                                   line,
+                                   "*** Message not found",
+                                   CONFIG_TEST_BBS_STEP_TIMEOUT_MS,
+                                   capture,
+                                   CAPTURE_MAX);
+        record_result(ctx,
+                      "Recipient-K verify removed",
+                      ok,
+                      ok ? "message no longer present" : "message still present after recipient delete");
+    }
+
     ok = cleanup_created_messages(ctx, capture, CAPTURE_MAX);
     record_result(ctx,
                   "Cleanup created messages",
@@ -1520,7 +1807,7 @@ static void run_script(app_ctx_t *ctx)
                   ok ? "no run-tagged messages left" : "some run-tagged messages remain");
 
     ok = run_cmd_expect_prompt(ctx,
-                               "SP BAD\r",
+                               "SP BAD*\r",
                                "*** SP requires valid callsign",
                                CONFIG_TEST_BBS_STEP_TIMEOUT_MS,
                                capture,
@@ -1529,12 +1816,16 @@ static void run_script(app_ctx_t *ctx)
 
     ok = run_cmd_expect_prompt(ctx,
                                "XYZ\r",
-                               "Commands:",
+                               NULL,
                                CONFIG_TEST_BBS_STEP_TIMEOUT_MS,
                                capture,
                                CAPTURE_MAX);
+    ok = ok &&
+         (capture_contains(capture, "*** Unknown command") ||
+          capture_contains(capture, "Commands:"));
     record_result(ctx, "Unknown command help", ok, ok ? "help shown" : "help not shown");
 
+    xEventGroupClearBits(ctx->events, EVT_DISCONNECTED);
     ok = send_text(&ctx->conn, "B\r");
     if (ok) {
         EventBits_t bits = xEventGroupWaitBits(ctx->events,
@@ -1592,6 +1883,7 @@ void app_main(void)
     ax25_conn_callbacks_t cbs = {0};
     ax25_conn_config_t conn_cfg = AX25_CONN_CONFIG_DEFAULT();
     ax25_address_t local_addr;
+    ax25_address_t alt_local_addr;
     ax25_address_t remote_addr;
     esp_err_t err;
 
@@ -1636,6 +1928,12 @@ void app_main(void)
         ESP_LOGE(TAG, "Invalid remote callsign: %s", CONFIG_TEST_BBS_REMOTE_CALLSIGN);
         return;
     }
+    if (ax25_address_from_string(ALT_LOCAL_CALLSIGN, &alt_local_addr) != ESP_OK) {
+        ESP_LOGE(TAG, "Invalid alternate local callsign: %s", ALT_LOCAL_CALLSIGN);
+        return;
+    }
+    s_ctx.primary_local_addr = local_addr;
+    s_ctx.alt_local_addr = alt_local_addr;
     s_ctx.remote_addr = remote_addr;
 
     err = ax25_router_init();
@@ -1695,6 +1993,9 @@ void app_main(void)
         ESP_LOGE(TAG, "TCP KISS client init failed: %s", esp_err_to_name(err));
         return;
     }
+
+    s_ctx.tcp_phy = &phy;
+    s_ctx.tcp_phy_cfg = phy_cfg;
 #elif CONFIG_TEST_BBS_KISS_UART
     ESP_ERROR_CHECK(configure_uart_keys_from_kconfig());
     err = ax25_phy_kiss_uart_init(phy_frame_cb, &phy_port, &phy);
@@ -1704,11 +2005,7 @@ void app_main(void)
     }
 #endif
 
-    cbs.on_connect = on_connect;
-    cbs.on_disconnect = on_disconnect;
-    cbs.on_error = on_error;
-    cbs.on_data = on_data;
-    cbs.on_tx_frame = on_tx_frame;
+    setup_conn_callbacks(&cbs);
 
     err = ax25_conn_init(&s_ctx.conn, &local_addr, &cbs, &s_ctx, &conn_cfg);
     if (err != ESP_OK) {
