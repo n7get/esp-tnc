@@ -180,6 +180,14 @@ static const ax25_cfg_param_t s_bbs_local_cfg_schema[] = {
         .type = AX25_CFG_TYPE_INT,
         .hide = false,
     },
+    {
+        .parameter = "net.kiss.server.promiscuous",
+        .nvs_key = "nk_srv_promisc",
+        .default_value = "0",
+        .range = "0,1",
+        .type = AX25_CFG_TYPE_BOOL,
+        .hide = false,
+    },
 };
 
 #define BBS_EVT_QUEUE_LEN 16
@@ -557,7 +565,8 @@ static void kiss_on_connected(ax25_kiss_tcp_server_conn_t *conn)
     }
 
     memset(&slot->port, 0, sizeof(slot->port));
-    slot->port.mode = AX25_PORT_DYNAMIC;
+    bool promiscuous = ax25_cfg_get_bool("net.kiss.server.promiscuous");
+    slot->port.mode = promiscuous ? AX25_PORT_PROMISCUOUS : AX25_PORT_DYNAMIC;
     slot->port.on_tx_frame = kiss_port_frame_cb;
     slot->port.user_data = conn;
 
