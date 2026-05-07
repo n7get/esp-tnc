@@ -8,3 +8,7 @@ prompt.txt
 prompts.txt
 local
 *.save
+
+AGENTS.md
+CONTEXT.md
+docs/

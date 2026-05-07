@@ -43,7 +43,7 @@ Main commands:
 - `S <dest>`: send (callsign => private, other => bulletin/topic)
 - `SP <call>`: send private message
 - `SB <dest>`: send bulletin
-- `K <n>`: delete message (own or SYSOP)
+- `K <n>`: delete message (from/to current user, or SYSOP)
 - `SYSOP`: start SYSOP authentication
 - `CONFIG`: enter config mode (after auth if secret is set)
 - `TERM`: enter UART terminal mode (after auth)
@@ -118,7 +118,7 @@ commit timeout period you can skip the commit.
    session.
 1. Send `/exit` to leave terminal mode and return to BBS command mode.
 1. Restore the `uart.type=kiss` configuration parameter.  
-    1. If you did the `commit` above, go through the `CONFIG`/`SET uart.type=kiss`/`save`/`reboot` ... `commit` process.
+    1. If you did the `commit` above, go through the `CONFIG`/`set uart.type=kiss`/`save`/`reboot` ... `commit` process.
     1. Otherwise if you skipped the commit, re-enter the `CONFIG` and `revert`/`reboot` to 
     restore `uart.type=kiss`.
 
@@ -137,7 +137,7 @@ ESP-TNC supports optional LED indicators for device status:
 
 **PWR LED (Power/Status Indicator):**
 - Steady on during normal operation
-- Blinks off and on when configuration safety timer active 
+- Blinks off and on when configuration safety timer is active
 - GPIO pin configured via `led.pwr_pin`
 
 **BBS LED (BBS Connection Indicator):**

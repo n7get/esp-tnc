@@ -220,7 +220,7 @@ set led.bbs_pin=0
 
 LED behavior:
 
-- **PWR LED**: Steady on normally, blinks config safety timer is running.
+- **PWR LED**: Steady on normally, blinks when the config safety timer is running.
 - **BBS LED**: Steady on when connected, blinks when unread messages exist, off when idle
 
 ## Step 5: Apply The Changes Safely

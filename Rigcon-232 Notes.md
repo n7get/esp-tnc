@@ -24,7 +24,7 @@ set uart.tx_pin=8
 
 ## Power connector
 
-the power connector is a 5.5x2.1 barrel with center positive.  The voltage range is 3.8 to 32.
+The power connector is a 5.5x2.1 barrel with center positive.  The voltage range is 3.8 to 32.
 
 ## LED GPIO Pin Assignments
 
